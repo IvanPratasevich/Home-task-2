@@ -1,0 +1,181 @@
+// 1)
+
+use booking_db
+
+// 2)
+
+db.facilities.insertMany([
+  { _id: 1, name: "TV" },
+  { _id: 2, name: "WiFi" },
+  { _id: 3, name: "Minibar" }
+]);
+
+
+// 3)
+
+db.hotels.insertMany([
+  { _id: 1, hotelName: "Redisson" },
+  { _id: 2, hotelName: "Park Inn" }
+]);
+
+
+// 4)
+
+db.rooms.insertMany([
+  {
+    _id: 1,
+    hotelId: 1,
+    roomSize: 30,
+    roomCapacity: 1,
+    facilityIds: [1, 2]
+  },
+  {
+    _id: 2,
+    hotelId: 1,
+    roomSize: 50,
+    roomCapacity: 3,
+    facilityIds: [1]
+  },
+  {
+    _id: 3,
+    hotelId: 1,
+    roomSize: 45,
+    roomCapacity: 2,
+    facilityIds: [3, 2]
+  },
+  {
+    _id: 4,
+    hotelId: 2,
+    roomSize: 70,
+    roomCapacity: 4,
+    facilityIds: [1, 2, 3]
+  },
+  {
+    _id: 5,
+    hotelId: 2,
+    roomSize: 40,
+    roomCapacity: 1,
+    facilityIds: [1]
+  }
+]);
+
+
+// 5)
+
+db.guests.insertMany([
+  { _id: 1, name: "Hamilton", birthday: new Date("1980-01-01") },
+  { _id: 2, name: "Gery",     birthday: new Date("2005-03-02") },
+  { _id: 3, name: "Enrika",   birthday: new Date("1985-10-10") },
+  { _id: 4, name: "Alisa",    birthday: new Date("2010-03-08") },
+  { _id: 5, name: "Lucas",    birthday: new Date("2000-06-01") }
+]);
+
+
+// 6)
+
+db.bookings.insertMany([
+  {
+    _id: 1,
+    roomId: 1,
+    mainGuestId: 5,
+    additionalGuestIds: [],
+    startDate: new Date("2024-01-01"),
+    endDate:   new Date("2024-01-07"),
+    notes: null
+  },
+  {
+    _id: 2,
+    roomId: 4,
+    mainGuestId: 1,
+    additionalGuestIds: [2, 3, 4],
+    startDate: new Date("2024-02-20"),
+    endDate:   new Date("2024-02-29"),
+    notes: "with a cat"
+  },
+  {
+    _id: 3,
+    roomId: 3,
+    mainGuestId: 3,
+    additionalGuestIds: [5],
+    startDate: new Date("2024-05-01"),
+    endDate:   new Date("2024-05-05"),
+    notes: "additional pillow"
+  }
+]);
+
+// ****************************************************
+// 1.  Retrieve information on reservations made by Lucas
+
+const lucas = db.guests.findOne({ name: "Lucas" });
+
+db.bookings.find({
+  $or: [
+    { mainGuestId: lucas._id },
+    { additionalGuestIds: lucas._id }
+  ]
+}).pretty();
+
+// ****************************************************
+// 2. Enrika cancelled her reservation, this data needs to be removed from the database.
+
+const enrika = db.guests.findOne({ name: "Enrika" });
+
+db.bookings.deleteMany({ mainGuestId: enrika._id });
+
+
+
+// ****************************************************
+// 3. Add a note to the reservation made by Lucas that he will arrive at the hotel after 10 pm.
+
+const lucas = db.guests.findOne({ name: "Lucas" });
+
+db.bookings.updateOne(
+  { mainGuestId: lucas._id },
+  { $set: { notes: "Arrives after 10 pm" } }
+);
+
+
+
+// ****************************************************
+// 4. Calculate how many bookings were made in each hotel.
+
+db.bookings.aggregate([
+  {
+    $lookup: {
+      from: "rooms",
+      localField: "roomId",
+      foreignField: "_id",
+      as: "roomDetails"
+    }
+  },
+  {
+    $unwind: "$roomDetails"
+  },
+  {
+    $group: {
+      _id: "$roomDetails.hotelId",
+      totalBookings: { $sum: 1 }
+    }
+  },
+  {
+    $lookup: {
+      from: "hotels",
+      localField: "_id",
+      foreignField: "_id",
+      as: "hotelDetails"
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      message: {
+        $concat: [
+          "In ",
+          { $arrayElemAt: ["$hotelDetails.hotelName", 0] },
+          " hotel total bookings — ",
+          { $toString: "$totalBookings" }
+        ]
+      }
+    }
+  }
+]);
